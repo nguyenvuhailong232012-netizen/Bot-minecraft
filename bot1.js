@@ -1,3 +1,9 @@
+const http = require('http');
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Bot is running!\n');
+});
+server.listen(process.env.PORT || 3000);
 const mineflayer = require('mineflayer');
 const readline = require('readline');
 const Vec3 = require('vec3');
