@@ -33,17 +33,16 @@ console.error = function (...args) {
   originalConsoleError.apply(console, args);
 };
 
-// BẢNG HƯỚNG DẪN ĐƯỢC GỬI RIÊNG TƯ QUA /MSG
+// BẢNG HƯỚNG DẪN GỬI CÔNG KHAI KHI GÕ *^help^
 const HELP_LINES = [
   "=== HỆ THỐNG ĐIỀU KHIỂN BOT VIP ===",
   "🔹 Di chuyển: *^w [giây]^, *^s^, *^a^, *^d^, *^nhay^, *^ngoi^, *^dung^, *^ditheo [tên]^",
   "🔹 Nhìn: *^nhintheo [tên]^, *^dungnhin^",
   "🔹 Teleport: *^tpa [tên]^, *^tpaccept^, *^afkzone^",
-  "🔹 Đào & Xây: *^daoblock [tên]^, *^daotoado x y z^, *^daovung x1 y1 z1 x2 y2 z2^",
-  "🔹 Xây Nâng Cao: *^xayvung...^, *^xaytron...^",
-  "🔹 Combat & Farm: *^sanquai [tên]^, *^dungsanquai^, *^danh^, *^farm x1 y1 z1 x2 y2 z2^, *^dungfarm^",
-  "🔹 Kho đồ & Khác: *^inv^, *^hotbar [1-9]^, *^vut^, *^chuotphai^, *^an^, *^info^, *^shards^, *^players^",
-  "🔹 Nói chuyện: Gõ *^Nội dung^ để bot nói ra công khai"
+  "🔹 Đào & Xây: *^daoblock [tên]^, *^daotoado x y z^, *^daovung x1 y1 z1 x2 y2 z2^, *^xayvung...^, *^xaytron...^",
+  "🔹 Combat & Farm: *^sanquai [tên]^, *^dungsanquai^, *^danh [số nhát]^, *^farm x1 y1 z1 x2 y2 z2^, *^dungfarm^",
+  "🔹 Kho đồ & Khác: *^inv^, *^hotbar [1-9]^, *^vut [SL] [Slot]^, *^vutall^, *^chuotphai^, *^an^, *^info^, *^shards^",
+  "🔹 Nói chuyện: Gõ *^Nội dung bất kỳ^ để bot chat công khai"
 ];
 
 function extractCleanChat(node) {
@@ -71,6 +70,7 @@ function createBot() {
   let isFarming = false;
   let isExecutingTask = false; 
   let huntTargetType = null;
+  let isEating = false;
 
   const bot = mineflayer.createBot({
     host: 'gemsmp.club',
@@ -118,8 +118,29 @@ function createBot() {
     } catch (e) { return false; }
   }
 
+  // Tự động ăn táo/đồ ăn đến khi đủ 40 máu, sau đó trả về hotbar cũ
+  async function autoEat() {
+    if (isEating || bot.health >= 40) return;
+    const food = bot.inventory.items().find(i => i.name.includes('apple') || i.name.includes('bread') || i.name.includes('golden') || i.name.includes('steak'));
+    if (!food) return;
+
+    isEating = true;
+    const oldSlot = bot.quickBarSlot;
+    try {
+      while (bot.health < 40) {
+        const currentFood = bot.inventory.items().find(i => i.name.includes('apple') || i.name.includes('bread') || i.name.includes('golden') || i.name.includes('steak'));
+        if (!currentFood) break;
+        await bot.equip(currentFood, 'hand');
+        await bot.consume();
+        await bot.waitForTicks(10);
+      }
+    } catch (e) {}
+    bot.setQuickBarSlot(oldSlot);
+    isEating = false;
+  }
+
   // ==========================================
-  // XỬ LÝ LỆNH VÀ PHẢN HỒI QUA TÍN NHẮN RIÊNG (/MSG)
+  // XỬ LÝ LỆNH VÀ PHẢN HỒI RIÊNG TƯ QUA /MSG
   // ==========================================
   async function handleCommand(rawInput, sender) {
     const parts = rawInput.trim().split(' ');
@@ -127,21 +148,22 @@ function createBot() {
     const arg = parts.slice(1).join(' ').trim();
     const args = parts.slice(1);
 
-    // Hàm phản hồi bí mật cho người dùng (Không chat public)
     const sendMsg = (msg) => {
       console.log(`[CMD REPLY to ${sender}] ${msg}`);
       if (sender && sender !== 'console' && sender !== 'Ai_do') {
         bot.chat(`/msg ${sender} ${msg}`);
+      } else {
+        bot.chat(msg);
       }
     };
 
     if (text === 'help') {
       HELP_LINES.forEach((line, index) => {
-        setTimeout(() => sendMsg(line), index * 350);
+        setTimeout(() => bot.chat(line), index * 350); // In công khai ra chat theo yêu cầu
       });
     } else if (text === 'info') {
       const pos = bot.entity.position;
-      sendMsg(`📍 X:${pos.x.toFixed(1)} Y:${pos.y.toFixed(1)} Z:${pos.z.toFixed(1)} | ❤️ Máu: ${bot.health} | 🍖 Đói: ${bot.food}`);
+      sendMsg(`📍 X:${pos.x.toFixed(1)} Y:${pos.y.toFixed(1)} Z:${pos.z.toFixed(1)} | ❤️ Máu: ${Math.round(bot.health)} | 🍖 Đói: ${Math.round(bot.food)}`);
     } else if (text === 'shards') {
       sendMsg(`💎 Tổng số shard bot đã tích lũy: ${totalShards}`);
     } else if (text === 'players') {
@@ -200,13 +222,16 @@ function createBot() {
       bot.chat('/afkzone');
       sendMsg('🌀 Đang chuyển về AFK Zone...');
     } else if (text === 'danh') {
-      const filter = e => e.type === 'mob' || e.type === 'player';
-      const entity = bot.nearestEntity(filter);
+      const hits = parseInt(arg) || 1;
+      const entity = bot.nearestEntity(e => e.type === 'mob' || e.type === 'player');
       if (entity) {
-        bot.attack(entity, true);
-        sendMsg(`⚔️ Đã đánh mục tiêu gần nhất!`);
+        sendMsg(`⚔️ Sẽ chém mục tiêu ${hits} nhát!`);
+        for (let i = 0; i < hits; i++) {
+          bot.attack(entity, true);
+          await bot.waitForTicks(10);
+        }
       } else {
-        sendMsg('⚠️ Không có mục tiêu ở gần!');
+        sendMsg('⚠️ Không có mục tiêu ở gần để đánh!');
       }
     } else if (text === 'daoblock') {
       if (!arg) return sendMsg('⚠️ Dùng: *^daoblock [tên_block]^');
@@ -306,15 +331,35 @@ function createBot() {
         sendMsg(`🎒 Đã đổi hotbar ô ${slot}`);
       }
     } else if (text === 'inv') {
-      sendMsg("📦 Hãy kiểm tra console trên Render hoặc cầm item trên tay!");
-    } else if (text === 'vut' || text === 'vut1') {
-      const item = bot.heldItem;
-      if (!item) return sendMsg('❌ Không cầm đồ trên tay!');
-      try {
-        if (text === 'vut1') await bot.toss(item.type, null, 1);
-        else await bot.tossStack(item);
-        sendMsg(`🗑️ Đã vứt ${item.name}!`);
-      } catch (e) { sendMsg('❌ Không vứt được!'); }
+      // Gom lại thành 1 dòng duy nhất để không bị chặn spam
+      const items = bot.inventory.items().map(i => `${i.name}x${i.count}`).join(', ');
+      sendMsg(`📦 Kho: ${items ? items.substring(0, 220) : "Trống!"}`);
+    } else if (text === 'vutall') {
+      sendMsg('🗑️ Đang xả toàn bộ đồ trong túi...');
+      const items = bot.inventory.items();
+      for (let item of items) {
+        try { await bot.tossStack(item); await bot.waitForTicks(5); } catch (e) {}
+      }
+      sendMsg('✅ Đã dọn sạch đồ!');
+    } else if (text === 'vut') {
+      // Cú pháp: *^vut [Số lượng] [Slot]^
+      if (args.length >= 2) {
+        const amount = parseInt(args[0]);
+        const slotNum = parseInt(args[1]);
+        const itemToToss = bot.inventory.slots[slotNum];
+        if (itemToToss) {
+          try {
+            await bot.toss(itemToToss.type, itemToToss.metadata, amount);
+            sendMsg(`🗑️ Đã vứt ${amount} cái từ slot ${slotNum}!`);
+          } catch(e) {}
+        } else {
+          sendMsg(`❌ Ô số ${slotNum} không có đồ!`);
+        }
+      } else {
+        const item = bot.heldItem;
+        if (!item) return sendMsg('❌ Không cầm đồ trên tay!');
+        try { await bot.tossStack(item); sendMsg(`🗑️ Đã vứt ${item.name}!`); } catch (e) {}
+      }
     } else if (text === 'click') {
       if (!arg) return sendMsg('⚠️ Dùng: *^click [slot]^');
       const slot = parseInt(arg, 10);
@@ -331,20 +376,30 @@ function createBot() {
       bot.activateItem(); 
       sendMsg('🤚 Đã bấm chuột phải.');
     } else if (text === 'an' || text === 'eat') {
-      const item = bot.heldItem;
-      if (!item) return sendMsg('❌ Chưa cầm đồ ăn!');
-      sendMsg(`🍎 Đang ăn ${item.name}...`);
-      try {
-        await bot.consume();
-        sendMsg(`😋 Đã ăn xong!`);
-      } catch (e) {
-        sendMsg('❌ Lỗi khi ăn!');
-      }
+      autoEat();
+      sendMsg('🍎 Đang tiến hành ăn hồi máu...');
     }
   }
 
   bot.on('physicsTick', async () => {
     if (!bot.entity) return;
+
+    // Kiểm tra tự động ăn nếu máu dưới 20
+    if (bot.health < 20 && !isEating) {
+      autoEat();
+    }
+
+    // Chạy trốn khi máu <= 5 (2.5 tim)
+    if (bot.health <= 5) {
+      bot.setControlState('forward', true);
+      bot.setControlState('sprint', true);
+      bot.setControlState('jump', true);
+      const threat = bot.nearestEntity(e => e.type === 'mob' || e.type === 'player');
+      if (threat) {
+         const yaw = Math.atan2(bot.entity.position.x - threat.position.x, bot.entity.position.z - threat.position.z);
+         bot.look(yaw, 0);
+      }
+    }
 
     if (lookTargetName !== null) {
       const targetEntity = lookTargetName === 'nearest' ? bot.nearestEntity(e => e.type === 'player' && e !== bot.entity) : bot.players[lookTargetName]?.entity;
@@ -394,7 +449,7 @@ function createBot() {
   });
 
   // ==========================================
-  // BẮT CÚ PHÁP *^...^ VÀ LẤY ĐÚNG TÊN NGƯỜI GỬI
+  // BẮT CÚ PHÁP VÀ PHẢN HỒI RIÊNG TƯ QUA /MSG
   // ==========================================
   bot.on('message', (jsonMsg) => {
     const rawText = extractCleanChat(jsonMsg);
@@ -404,7 +459,6 @@ function createBot() {
 
     console.log(`[CHAT] 💬 ${fullText}`);
 
-    // Bất kỳ ai chat có chứa định dạng *^...^ đều kích hoạt
     if (fullText.includes('*^')) {
       const startIndex = fullText.indexOf('*^');
       const endIndex = fullText.indexOf('^', startIndex + 2);
@@ -412,20 +466,15 @@ function createBot() {
       if (startIndex !== -1 && endIndex !== -1) {
         const content = fullText.slice(startIndex + 2, endIndex).trim();
         
-        // Trích xuất Tên Người Gửi chính xác từ dòng chat của server GemSMP
         let senderName = "Ai_do";
-        
-        // TH1: Nhắn tin riêng: [Tên người gửi ➔ tôi] hoặc [Tên người gửi -> tôi]
         const pmMatch = fullText.match(/([a-zA-Z0-9_]+)\s*(?:➔|->)\s*tôi/i);
         if (pmMatch) {
           senderName = pmMatch[1];
         } else {
-          // TH2: Chat chung (Ví dụ: TênNgườiChơi: *^help^ hoặc [Rank] TênNgườiChơi: *^help^)
           const colonMatch = fullText.match(/([a-zA-Z0-9_]+)\s*:/);
           if (colonMatch) {
             senderName = colonMatch[1];
           } else {
-            // TH3: Fallback lấy từ đầu tiên là tên
             const parts = fullText.split(/\s+/);
             for (let p of parts) {
               const cleanP = p.replace(/[^a-zA-Z0-9_]/g, '');
@@ -439,15 +488,13 @@ function createBot() {
 
         console.log(`[IN-GAME COMMAND] 📩 Nhận từ ${senderName}: ${content}`);
         
-        const validCommands = ['help', 'info', 'shards', 'players', 'w', 's', 'a', 'd', 'nhay', 'ngoi', 'unngoi', 'dung', 'ditheo', 'dungditheo', 'nhintheo', 'dungnhin', 'tpa', 'tpaccept', 'tpacc', 'afkzone', 'afk', 'danh', 'daoblock', 'daotoado', 'daovung', 'xayvung', 'xaytron', 'sanquai', 'dungsanquai', 'farm', 'dungfarm', 'hotbar', 'inv', 'vut', 'vut1', 'click', 'dongruong', 'chuotphai', 'an', 'eat'];
+        const validCommands = ['help', 'info', 'shards', 'players', 'w', 's', 'a', 'd', 'nhay', 'ngoi', 'unngoi', 'dung', 'ditheo', 'dungditheo', 'nhintheo', 'dungnhin', 'tpa', 'tpaccept', 'tpacc', 'afkzone', 'afk', 'danh', 'daoblock', 'daotoado', 'daovung', 'xayvung', 'xaytron', 'sanquai', 'dungsanquai', 'farm', 'dungfarm', 'hotbar', 'inv', 'vut', 'vutall', 'vut1', 'click', 'dongruong', 'chuotphai', 'an', 'eat'];
         
         const cmdKey = content.split(' ')[0].toLowerCase();
         
-        // Nếu là lệnh hợp lệ => Thực thi và trả lời riêng qua /msg
         if (validCommands.includes(cmdKey)) {
           handleCommand(content, senderName);
         } else {
-          // Không phải lệnh hợp lệ -> Nói câu đó ra công khai
           bot.chat(content);
           console.log(`[BOT TALK] 🗣️ Đã nói: ${content}`);
         }
@@ -484,7 +531,6 @@ function createBot() {
     if (!isInitialized || !bot) return;
     const now = Date.now();
     if (now - lastDailyTime >= DAILY_COOLDOWN) {
-      console.log('[SYSTEM] ⏳ Đã đủ 12 tiếng, tự động gửi /daily...');
       bot.chat('/daily');
       lastDailyTime = now;
     }
@@ -492,10 +538,9 @@ function createBot() {
 
   bot.on('windowOpen', async (window) => {
     const titleStr = JSON.stringify(window.title || '').toLowerCase();
-    console.log(`[CHEST] 📦 Đã mở rương/GUI mới! (Tiêu đề: ${titleStr})`);
+    console.log(`[CHEST] 📦 Đã mở GUI: ${titleStr}`);
     
     if (titleStr.includes('daily') || titleStr.includes('điểm danh') || titleStr.includes('thưởng')) {
-      console.log('[CHEST] ⚙️ Phát hiện menu /daily, đang tự động nhận quà...');
       setTimeout(async () => {
         try {
           for (let i = 0; i < window.slots.length; i++) {
@@ -509,15 +554,11 @@ function createBot() {
             if (itemData.includes('đã nhận') || itemData.includes('claimed') || itemData.includes('khoá')) continue;
             
             await bot.clickWindow(i, 0, 0);
-            console.log(`[CHEST] ✅ Đã nhận quà tại ô số ${i} [${item.name}]`);
             break; 
           }
-          setTimeout(() => {
-            try { bot.closeWindow(window); } catch(e){}
-          }, 1000);
+          setTimeout(() => { try { bot.closeWindow(window); } catch(e){} }, 1000);
         } catch (e) {}
       }, 1500);
-      return;
     }
   });
 
