@@ -4,11 +4,10 @@ const server = http.createServer((req, res) => {
   res.end('Bot is running!\n');
 });
 server.listen(process.env.PORT || 3000);
+
 const mineflayer = require('mineflayer');
-const readline = require('readline');
 const Vec3 = require('vec3');
 
-// Tự động nạp pathfinder nếu có
 let pathfinder, Movements, goals;
 try {
   const pf = require('mineflayer-pathfinder');
@@ -34,25 +33,18 @@ console.error = function (...args) {
   originalConsoleError.apply(console, args);
 };
 
-// BẢNG HƯỚNG DẪN KHI GÕ HELP TRÊN CONSOLE
-function printHelpMenu() {
-  console.log('\n========================================');
-  console.log('🤖 HỆ THỐNG ĐIỀU KHIỂN BOT VIP');
-  console.log('========================================');
-  console.log(' 🚶 Di chuyển   : w, s, a, d [giây], nhay, ngoi, unngoi, dung');
-  console.log('                : ditheo [tên], dungditheo, nhintheo [tên], dungnhin');
-  console.log(' 🚀 Teleport    : tpa [tên], tpaccept, afkzone');
-  console.log(' ⛏️ Khai thác   : daoblock [tên_block], daotoado [x y z]');
-  console.log('                : daovung [x1 y1 z1 x2 y2 z2]');
-  console.log(' 🏗️ Xây dựng    : xayvung [x1 y1 z1 x2 y2 z2 block hollow?]');
-  console.log('                : thayvung [x1 y1 z1 x2 y2 z2 block_cu block_moi]');
-  console.log('                : xaytron [x y z ban_kinh block]');
-  console.log(' ⚔️ Combat      : sanquai [tên_quái], dungsanquai, danh');
-  console.log(' ♻️ Auto Farm   : farm [x1 y1 z1 x2 y2 z2], dungfarm');
-  console.log(' 🎒 Túi đồ      : inv, hotbar [1-9], vut, vut1, click [slot], dongruong, chuotphai, an');
-  console.log(' ℹ️ Hệ thống    : info, shards, players, exit, help');
-  console.log('========================================\n');
-}
+// BẢNG HƯỚNG DẪN ĐƯỢC GỬI RIÊNG TƯ QUA /MSG
+const HELP_LINES = [
+  "=== HỆ THỐNG ĐIỀU KHIỂN BOT VIP ===",
+  "🔹 Di chuyển: *^w [giây]^, *^s^, *^a^, *^d^, *^nhay^, *^ngoi^, *^dung^, *^ditheo [tên]^",
+  "🔹 Nhìn: *^nhintheo [tên]^, *^dungnhin^",
+  "🔹 Teleport: *^tpa [tên]^, *^tpaccept^, *^afkzone^",
+  "🔹 Đào & Xây: *^daoblock [tên]^, *^daotoado x y z^, *^daovung x1 y1 z1 x2 y2 z2^",
+  "🔹 Xây Nâng Cao: *^xayvung...^, *^xaytron...^",
+  "🔹 Combat & Farm: *^sanquai [tên]^, *^dungsanquai^, *^danh^, *^farm x1 y1 z1 x2 y2 z2^, *^dungfarm^",
+  "🔹 Kho đồ & Khác: *^inv^, *^hotbar [1-9]^, *^vut^, *^chuotphai^, *^an^, *^info^, *^shards^, *^players^",
+  "🔹 Nói chuyện: Gõ *^Nội dung^ để bot nói ra công khai"
+];
 
 function extractCleanChat(node) {
   if (!node) return '';
@@ -70,7 +62,7 @@ let lastDailyTime = 0;
 const DAILY_COOLDOWN = 12 * 60 * 60 * 1000;
 
 function createBot() {
-  console.log('[SERVER] ⚙️ Đang kết nối tới gemsmp.club...');
+  console.log('[SERVER] ⚙️ Đang kết nối tới gemsmp.club trên Render Cloud...');
 
   let isInitialized = false;
   let lookTargetName = null;
@@ -127,112 +119,118 @@ function createBot() {
   }
 
   // ==========================================
-  // HỆ THỐNG XỬ LÝ LỆNH TRÊN TERMINAL (CONSOLE)
+  // XỬ LÝ LỆNH VÀ PHẢN HỒI QUA TÍN NHẮN RIÊNG (/MSG)
   // ==========================================
-  async function handleCommand(rawInput) {
+  async function handleCommand(rawInput, sender) {
     const parts = rawInput.trim().split(' ');
     const text = parts[0].toLowerCase();
     const arg = parts.slice(1).join(' ').trim();
     const args = parts.slice(1);
 
-    if (text === 'exit' || text === 'quit') {
-      console.log('[CONTROL] 🛑 Đang thoát chương trình...');
-      process.exit(0);
-    } else if (text === 'help') {
-      printHelpMenu();
+    // Hàm phản hồi bí mật cho người dùng (Không chat public)
+    const sendMsg = (msg) => {
+      console.log(`[CMD REPLY to ${sender}] ${msg}`);
+      if (sender && sender !== 'console' && sender !== 'Ai_do') {
+        bot.chat(`/msg ${sender} ${msg}`);
+      }
+    };
+
+    if (text === 'help') {
+      HELP_LINES.forEach((line, index) => {
+        setTimeout(() => sendMsg(line), index * 350);
+      });
     } else if (text === 'info') {
       const pos = bot.entity.position;
-      console.log(`[INFO] 📍 X:${pos.x.toFixed(1)} Y:${pos.y.toFixed(1)} Z:${pos.z.toFixed(1)} | ❤️ Máu: ${bot.health} | 🍖 Đói: ${bot.food}`);
+      sendMsg(`📍 X:${pos.x.toFixed(1)} Y:${pos.y.toFixed(1)} Z:${pos.z.toFixed(1)} | ❤️ Máu: ${bot.health} | 🍖 Đói: ${bot.food}`);
     } else if (text === 'shards') {
-      console.log(`[SHARD] 💎 Tổng số shard bot đã tích lũy: ${totalShards}`);
+      sendMsg(`💎 Tổng số shard bot đã tích lũy: ${totalShards}`);
     } else if (text === 'players') {
-      const playerNames = Object.keys(bot.players).join(', ');
-      console.log(`[PLAYERS] 👥 Người chơi online (${Object.keys(bot.players).length}): ${playerNames}`);
+      sendMsg(`👥 Online (${Object.keys(bot.players).length}): ${Object.keys(bot.players).join(', ')}`);
     } else if (['w', 's', 'a', 'd'].includes(text)) {
       const stateMapping = { 'w': 'forward', 's': 'back', 'a': 'left', 'd': 'right' };
       bot.setControlState(stateMapping[text], true);
       const duration = parseInt(arg, 10);
       if (!isNaN(duration) && duration > 0) {
-        console.log(`[CONTROL] 🚶 Đang đi hướng '${text}' trong ${duration}s`);
+        sendMsg(`🚶 Đang đi hướng '${text}' trong ${duration}s`);
         setTimeout(() => bot.setControlState(stateMapping[text], false), duration * 1000);
       } else {
-        console.log(`[CONTROL] 🚶 Đang đi hướng '${text}'. Gõ 'dung' để dừng.`);
+        sendMsg(`🚶 Đang đi hướng '${text}'. Gõ *^dung^ để dừng.`);
       }
     } else if (text === 'nhay') {
       bot.setControlState('jump', true);
       setTimeout(() => bot.setControlState('jump', false), 500);
-      console.log('[CONTROL] 🦘 Đã nhảy!');
+      sendMsg('🦘 Đã nhảy!');
     } else if (text === 'ngoi') {
       bot.setControlState('sneak', true);
-      console.log('[CONTROL] 🧎 Đã ngồi.');
+      sendMsg('🧎 Đã ngồi.');
     } else if (text === 'unngoi') {
       bot.setControlState('sneak', false);
-      console.log('[CONTROL] 🚶 Đã đứng.');
+      sendMsg('🚶 Đã đứng.');
     } else if (text === 'dung') {
       lookTargetName = followTargetName = huntTargetType = null;
       isFarming = false;
       bot.clearControlStates();
       if (pathfinder) bot.pathfinder.setGoal(null);
-      console.log('[CONTROL] 🛑 Đã dừng MỌI hoạt động!');
-    } else if (text === 'nhintheo' || text === 'ditheo' || text === 'nhin') {
-      const target = arg || 'nearest';
+      sendMsg('🛑 Đã dừng mọi hoạt động!');
+    } else if (text === 'nhintheo' || text === 'ditheo') {
+      const target = arg || sender;
       if (text.includes('nhin')) { 
         lookTargetName = target; 
-        console.log(`[CONTROL] 👀 Đang nhìn theo: ${target}`); 
+        sendMsg(`👀 Đang nhìn theo: ${target}`); 
       } else { 
         followTargetName = target; 
-        console.log(`[CONTROL] 🏃 Đang đi theo: ${target}`); 
+        sendMsg(`🏃 Đang đi theo: ${target}`); 
       }
     } else if (text === 'dungditheo') {
       followTargetName = null;
       if (pathfinder) bot.pathfinder.setGoal(null);
       bot.clearControlStates();
-      console.log('[CONTROL] 🛑 Đã dừng đi theo.');
+      sendMsg('🛑 Đã dừng đi theo.');
     } else if (text === 'dungnhin') {
       lookTargetName = null;
-      console.log('[CONTROL] 👁️ Đã dừng nhìn.');
+      sendMsg('👁️ Đã dừng nhìn.');
     } else if (text === 'tpa') {
-      if (!arg) return console.log('⚠️ Dùng: tpa [tên_người_chơi]');
+      if (!arg) return sendMsg('⚠️ Dùng: *^tpa [tên]^');
       bot.chat(`/tpa ${arg}`);
-      console.log(`[CONTROL] 🚀 Đã gửi yêu cầu TPA tới ${arg}`);
+      sendMsg(`🚀 Đã gửi yêu cầu TPA tới ${arg}`);
     } else if (text === 'tpaccept' || text === 'tpacc') {
       bot.chat('/tpaccept');
-      console.log('[CONTROL] ✅ Đã chấp nhận dịch chuyển!');
+      sendMsg('✅ Đã chấp nhận dịch chuyển!');
     } else if (text === 'afkzone' || text === 'afk') {
       bot.chat('/afkzone');
-      console.log('[CONTROL] 🌀 Đang chuyển về AFK Zone...');
+      sendMsg('🌀 Đang chuyển về AFK Zone...');
     } else if (text === 'danh') {
       const filter = e => e.type === 'mob' || e.type === 'player';
       const entity = bot.nearestEntity(filter);
       if (entity) {
         bot.attack(entity, true);
-        console.log(`[CONTROL] ⚔️ Đã đánh mục tiêu gần nhất: ${entity.username || entity.name}`);
+        sendMsg(`⚔️ Đã đánh mục tiêu gần nhất!`);
       } else {
-        console.log('[CONTROL] ⚠️ Không thấy mục tiêu nào ở gần để đánh!');
+        sendMsg('⚠️ Không có mục tiêu ở gần!');
       }
     } else if (text === 'daoblock') {
-      if (!arg) return console.log('⚠️ Dùng: daoblock [tên_block]');
+      if (!arg) return sendMsg('⚠️ Dùng: *^daoblock [tên_block]^');
       const targetBlock = bot.findBlock({ matching: b => b && b.name.includes(arg.toLowerCase()), maxDistance: 32 });
-      if (!targetBlock) return console.log(`❌ Không tìm thấy block '${arg}' gần đây!`);
-      console.log(`[CONTROL] ⛏️ Đang đào ${targetBlock.name}...`);
+      if (!targetBlock) return sendMsg(`❌ Không tìm thấy block '${arg}' gần đây!`);
+      sendMsg(`⛏️ Đang đào ${targetBlock.name}...`);
       try {
         if (pathfinder) await bot.pathfinder.goto(new goals.GoalGetToBlock(targetBlock.position.x, targetBlock.position.y, targetBlock.position.z));
         await bot.dig(targetBlock);
-        console.log('[CONTROL] ✅ Đã đào xong!');
-      } catch (e) { console.log('[CONTROL] ❌ Lỗi khi đào!'); }
+        sendMsg('✅ Đã đào xong!');
+      } catch (e) { sendMsg('❌ Lỗi khi đào!'); }
     } else if (text === 'daotoado') {
-      if (args.length < 3) return console.log('⚠️ Dùng: daotoado x y z');
+      if (args.length < 3) return sendMsg('⚠️ Dùng: *^daotoado x y z^');
       const bx = parseInt(args[0]), by = parseInt(args[1]), bz = parseInt(args[2]);
       const targetBlock = bot.blockAt(new Vec3(bx, by, bz));
-      if (!targetBlock || targetBlock.name === 'air') return console.log('❌ Tọa độ không có block!');
+      if (!targetBlock || targetBlock.name === 'air') return sendMsg('❌ Tọa độ không có block!');
       try {
         if (pathfinder) await bot.pathfinder.goto(new goals.GoalGetToBlock(bx, by, bz));
         await bot.dig(targetBlock);
-        console.log('[CONTROL] ✅ Đã đào xong!');
-      } catch (e) { console.log('[CONTROL] ❌ Lỗi khi đào!'); }
+        sendMsg('✅ Đã đào xong!');
+      } catch (e) { sendMsg('❌ Lỗi khi đào!'); }
     } else if (text === 'daovung') {
-      if (args.length < 6) return console.log('⚠️ Dùng: daovung x1 y1 z1 x2 y2 z2');
-      console.log('[CONTROL] ⛏️ Đang đào sạch khu vực...');
+      if (args.length < 6) return sendMsg('⚠️ Dùng: *^daovung x1 y1 z1 x2 y2 z2^');
+      sendMsg('⛏️ Đang đào sạch khu vực...');
       isExecutingTask = true;
       const minX = Math.min(args[0], args[3]), minY = Math.min(args[1], args[4]), minZ = Math.min(args[2], args[5]);
       const maxX = Math.max(args[0], args[3]), maxY = Math.max(args[1], args[4]), maxZ = Math.max(args[2], args[5]);
@@ -251,11 +249,11 @@ function createBot() {
         }
       }
       isExecutingTask = false;
-      console.log('[CONTROL] ✅ Đã đào xong khu vực!');
+      sendMsg('✅ Đã đào xong khu vực!');
     } else if (text === 'xayvung') {
-      if (args.length < 7) return console.log('⚠️ Dùng: xayvung x1 y1 z1 x2 y2 z2 block [hollow]');
+      if (args.length < 7) return sendMsg('⚠️ Dùng: *^xayvung x1... block [hollow]^');
       const isHollow = args[7] === 'hollow';
-      console.log(`[CONTROL] 🏗️ Xây khu vực ${isHollow ? '(rỗng)' : '(đặc)'}...`);
+      sendMsg(`🏗️ Xây khu vực ${isHollow ? '(rỗng)' : '(đặc)'}...`);
       isExecutingTask = true;
       const blockName = args[6];
       const minX = Math.min(args[0], args[3]), minY = Math.min(args[1], args[4]), minZ = Math.min(args[2], args[5]);
@@ -270,9 +268,9 @@ function createBot() {
         }
       }
       isExecutingTask = false;
-      console.log('[CONTROL] ✅ Đã xây xong!');
+      sendMsg('✅ Đã xây xong!');
     } else if (text === 'xaytron') {
-      if (args.length < 5) return console.log('⚠️ Dùng: xaytron x y z ban_kinh block');
+      if (args.length < 5) return sendMsg('⚠️ Dùng: *^xaytron x y z r block^');
       const cx = parseInt(args[0]), cy = parseInt(args[1]), cz = parseInt(args[2]), r = parseInt(args[3]);
       isExecutingTask = true;
       for (let x = -r; x <= r; x++) {
@@ -281,85 +279,69 @@ function createBot() {
         }
       }
       isExecutingTask = false;
-      console.log('[CONTROL] ✅ Xây hình tròn xong!');
+      sendMsg('✅ Xây hình tròn xong!');
     } else if (text === 'sanquai') {
-      if (!arg) return console.log('⚠️ Dùng: sanquai [tên]');
+      if (!arg) return sendMsg('⚠️ Dùng: *^sanquai [tên]^');
       huntTargetType = arg.toLowerCase();
-      console.log(`[CONTROL] ⚔️ Bật đi săn: ${huntTargetType}`);
+      sendMsg(`⚔️ Bật đi săn: ${huntTargetType}`);
     } else if (text === 'dungsanquai') {
       huntTargetType = null;
       if (pathfinder) bot.pathfinder.setGoal(null);
-      console.log('[CONTROL] 🛑 Đã dừng đi săn.');
+      sendMsg('🛑 Đã dừng đi săn.');
     } else if (text === 'farm') {
-      if (args.length < 6) return console.log('⚠️ Dùng: farm x1 y1 z1 x2 y2 z2');
+      if (args.length < 6) return sendMsg('⚠️ Dùng: *^farm x1 y1 z1 x2 y2 z2^');
       farmCoords = {
         minX: Math.min(args[0], args[3]), minY: Math.min(args[1], args[4]), minZ: Math.min(args[2], args[5]),
         maxX: Math.max(args[0], args[3]), maxY: Math.max(args[1], args[4]), maxZ: Math.max(args[2], args[5])
       };
       isFarming = true;
-      console.log('[CONTROL] ♻️ Bật Auto Farm.');
+      sendMsg('♻️ Bật Auto Farm.');
     } else if (text === 'dungfarm') {
       isFarming = false;
-      console.log('[CONTROL] 🛑 Đã tắt Auto Farm.');
+      sendMsg('🛑 Đã tắt Auto Farm.');
     } else if (text === 'hotbar') {
       const slot = parseInt(arg, 10);
       if (slot >= 1 && slot <= 9) {
         bot.setQuickBarSlot(slot - 1);
-        console.log(`[CONTROL] 🎒 Đã đổi sang hotbar ô số ${slot}`);
+        sendMsg(`🎒 Đã đổi hotbar ô ${slot}`);
       }
     } else if (text === 'inv') {
-      let invMsg = '📦 Kho chính (9-35):\n';
-      for (let i = 9; i <= 35; i++) {
-        const item = bot.inventory.slots[i];
-        if (item) invMsg += `[Slot ${i}] ${item.name} x${item.count}\n`;
-      }
-      invMsg += '🖐️ Hotbar (1-9):\n';
-      for (let i = 36; i <= 44; i++) {
-        const item = bot.inventory.slots[i];
-        if (item) invMsg += `[Slot ${i - 35}] ${item.name} x${item.count}\n`;
-      }
-      console.log(invMsg);
+      sendMsg("📦 Hãy kiểm tra console trên Render hoặc cầm item trên tay!");
     } else if (text === 'vut' || text === 'vut1') {
       const item = bot.heldItem;
-      if (!item) return console.log('❌ Không cầm đồ trên tay!');
+      if (!item) return sendMsg('❌ Không cầm đồ trên tay!');
       try {
         if (text === 'vut1') await bot.toss(item.type, null, 1);
         else await bot.tossStack(item);
-        console.log(`[CONTROL] 🗑️ Đã vứt ${item.name}!`);
-      } catch (e) { console.log('❌ Không vứt được!'); }
+        sendMsg(`🗑️ Đã vứt ${item.name}!`);
+      } catch (e) { sendMsg('❌ Không vứt được!'); }
     } else if (text === 'click') {
-      if (!arg) return console.log('⚠️ Dùng: click [slot]');
+      if (!arg) return sendMsg('⚠️ Dùng: *^click [slot]^');
       const slot = parseInt(arg, 10);
       if (bot.currentWindow) {
         await bot.clickWindow(slot, 0, 0).catch(()=>{});
-        console.log(`[CONTROL] 🖱️ Đã click ô ${slot}!`);
-      } else console.log('❌ Không mở rương!');
+        sendMsg(`🖱️ Đã click ô ${slot}!`);
+      } else sendMsg('❌ Không mở rương!');
     } else if (text === 'dongruong') {
       if (bot.currentWindow) {
         bot.closeWindow(bot.currentWindow);
-        console.log('[CONTROL] 🚪 Đã đóng rương!');
-      } else console.log('❌ Không mở rương!');
+        sendMsg('🚪 Đã đóng rương!');
+      } else sendMsg('❌ Không mở rương!');
     } else if (text === 'chuotphai') {
       bot.activateItem(); 
-      console.log('[CONTROL] 🤚 Đã bấm chuột phải.');
+      sendMsg('🤚 Đã bấm chuột phải.');
     } else if (text === 'an' || text === 'eat') {
       const item = bot.heldItem;
-      if (!item) return console.log('❌ Chưa cầm đồ ăn!');
-      console.log(`[CONTROL] 🍎 Đang ăn ${item.name}...`);
+      if (!item) return sendMsg('❌ Chưa cầm đồ ăn!');
+      sendMsg(`🍎 Đang ăn ${item.name}...`);
       try {
         await bot.consume();
-        console.log('[CONTROL] 😋 Đã ăn xong!');
+        sendMsg(`😋 Đã ăn xong!`);
       } catch (e) {
-        console.log('[CONTROL] ❌ Lỗi khi ăn!');
+        sendMsg('❌ Lỗi khi ăn!');
       }
-    } else {
-      bot.chat(rawInput);
-      console.log(`[CHAT] ⌨️ Đã gửi: ${rawInput}`);
     }
   }
-
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  rl.on('line', (line) => handleCommand(line));
 
   bot.on('physicsTick', async () => {
     if (!bot.entity) return;
@@ -411,6 +393,9 @@ function createBot() {
     }
   });
 
+  // ==========================================
+  // BẮT CÚ PHÁP *^...^ VÀ LẤY ĐÚNG TÊN NGƯỜI GỬI
+  // ==========================================
   bot.on('message', (jsonMsg) => {
     const rawText = extractCleanChat(jsonMsg);
     const fullText = rawText.replace(/\s+/g, ' ').trim();
@@ -418,6 +403,56 @@ function createBot() {
     const lowerMsg = fullText.toLowerCase();
 
     console.log(`[CHAT] 💬 ${fullText}`);
+
+    // Bất kỳ ai chat có chứa định dạng *^...^ đều kích hoạt
+    if (fullText.includes('*^')) {
+      const startIndex = fullText.indexOf('*^');
+      const endIndex = fullText.indexOf('^', startIndex + 2);
+      
+      if (startIndex !== -1 && endIndex !== -1) {
+        const content = fullText.slice(startIndex + 2, endIndex).trim();
+        
+        // Trích xuất Tên Người Gửi chính xác từ dòng chat của server GemSMP
+        let senderName = "Ai_do";
+        
+        // TH1: Nhắn tin riêng: [Tên người gửi ➔ tôi] hoặc [Tên người gửi -> tôi]
+        const pmMatch = fullText.match(/([a-zA-Z0-9_]+)\s*(?:➔|->)\s*tôi/i);
+        if (pmMatch) {
+          senderName = pmMatch[1];
+        } else {
+          // TH2: Chat chung (Ví dụ: TênNgườiChơi: *^help^ hoặc [Rank] TênNgườiChơi: *^help^)
+          const colonMatch = fullText.match(/([a-zA-Z0-9_]+)\s*:/);
+          if (colonMatch) {
+            senderName = colonMatch[1];
+          } else {
+            // TH3: Fallback lấy từ đầu tiên là tên
+            const parts = fullText.split(/\s+/);
+            for (let p of parts) {
+              const cleanP = p.replace(/[^a-zA-Z0-9_]/g, '');
+              if (cleanP.length >= 3 && cleanP.toLowerCase() !== 'chat') {
+                senderName = cleanP;
+                break;
+              }
+            }
+          }
+        }
+
+        console.log(`[IN-GAME COMMAND] 📩 Nhận từ ${senderName}: ${content}`);
+        
+        const validCommands = ['help', 'info', 'shards', 'players', 'w', 's', 'a', 'd', 'nhay', 'ngoi', 'unngoi', 'dung', 'ditheo', 'dungditheo', 'nhintheo', 'dungnhin', 'tpa', 'tpaccept', 'tpacc', 'afkzone', 'afk', 'danh', 'daoblock', 'daotoado', 'daovung', 'xayvung', 'xaytron', 'sanquai', 'dungsanquai', 'farm', 'dungfarm', 'hotbar', 'inv', 'vut', 'vut1', 'click', 'dongruong', 'chuotphai', 'an', 'eat'];
+        
+        const cmdKey = content.split(' ')[0].toLowerCase();
+        
+        // Nếu là lệnh hợp lệ => Thực thi và trả lời riêng qua /msg
+        if (validCommands.includes(cmdKey)) {
+          handleCommand(content, senderName);
+        } else {
+          // Không phải lệnh hợp lệ -> Nói câu đó ra công khai
+          bot.chat(content);
+          console.log(`[BOT TALK] 🗣️ Đã nói: ${content}`);
+        }
+      }
+    }
 
     const shardMatch = lowerMsg.match(/bạn đã nhận (\d+) shards từ afk/);
     if (shardMatch) {
@@ -455,29 +490,14 @@ function createBot() {
     }
   }, 60000);
 
-  // ==========================================
-  // KHÔI PHỤC LOG HIỂN THỊ KHI MỞ RƯƠNG / DAILY
-  // ==========================================
   bot.on('windowOpen', async (window) => {
     const titleStr = JSON.stringify(window.title || '').toLowerCase();
     console.log(`[CHEST] 📦 Đã mở rương/GUI mới! (Tiêu đề: ${titleStr})`);
-    console.log('[CHEST] 📋 Danh sách các món đồ có trong rương này:');
     
-    let hasItem = false;
-    for (let i = 0; i < window.slots.length; i++) {
-      const item = window.slots[i];
-      if (item && !item.name.includes('air') && !item.name.includes('pane')) {
-        hasItem = true;
-        console.log(` - [Ô số ${i}] ${item.name} x${item.count}`);
-      }
-    }
-    if (!hasItem) console.log(' - Rương trống!');
-
     if (titleStr.includes('daily') || titleStr.includes('điểm danh') || titleStr.includes('thưởng')) {
       console.log('[CHEST] ⚙️ Phát hiện menu /daily, đang tự động nhận quà...');
       setTimeout(async () => {
         try {
-          let clicked = false;
           for (let i = 0; i < window.slots.length; i++) {
             const item = window.slots[i];
             if (!item) continue;
@@ -489,18 +509,15 @@ function createBot() {
             if (itemData.includes('đã nhận') || itemData.includes('claimed') || itemData.includes('khoá')) continue;
             
             await bot.clickWindow(i, 0, 0);
-            clicked = true;
             console.log(`[CHEST] ✅ Đã nhận quà tại ô số ${i} [${item.name}]`);
             break; 
           }
-          if (!clicked) console.log('[CHEST] ⚙️ Không có quà hợp lệ hoặc đã nhận hết hôm nay rồi!');
           setTimeout(() => {
             try { bot.closeWindow(window); } catch(e){}
           }, 1000);
-        } catch (e) {
-          console.log(`[CHEST] ⚠️ Lỗi click GUI: ${e.message}`);
-        }
+        } catch (e) {}
       }, 1500);
+      return;
     }
   });
 
@@ -511,13 +528,11 @@ function createBot() {
   }, 30000);
 
   bot.on('spawn', () => {
-    setTimeout(() => printHelpMenu(), 1000);
     setTimeout(() => { if (!isInitialized) bot.chat('/login long232012'); }, 5000);
   });
 
   bot.on('end', () => {
     clearInterval(dailyInterval);
-    rl.close();
     console.log('[SERVER] ⚠️ Bị văng! Tự kết nối lại sau 20s...');
     setTimeout(createBot, 20000);
   });
